@@ -1,6 +1,6 @@
 package com.udacity.catpoint.security.service;
 
-import com.udacity.catpoint.image.service.FakeImageService;
+import com.udacity.catpoint.image.service.IService;
 import com.udacity.catpoint.security.application.StatusListener;
 import com.udacity.catpoint.security.data.AlarmStatus;
 import com.udacity.catpoint.security.data.ArmingStatus;
@@ -10,6 +10,7 @@ import com.udacity.catpoint.security.data.Sensor;
 import java.awt.image.BufferedImage;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 import static com.udacity.catpoint.security.data.AlarmStatus.*;
 
@@ -22,11 +23,12 @@ import static com.udacity.catpoint.security.data.AlarmStatus.*;
  */
 public class SecurityService {
 
-    private FakeImageService imageService;
+    private IService imageService;
     private SecurityRepository securityRepository;
     private Set<StatusListener> statusListeners = new HashSet<>();
+    private Boolean catDetection = false;
 
-    public SecurityService(SecurityRepository securityRepository, FakeImageService imageService) {
+    public SecurityService(SecurityRepository securityRepository, IService imageService) {
         this.securityRepository = securityRepository;
         this.imageService = imageService;
     }
@@ -38,10 +40,22 @@ public class SecurityService {
      * @param armingStatus
      */
     public void setArmingStatus(ArmingStatus armingStatus) {
+        if (catDetection && armingStatus == ArmingStatus.ARMED_HOME) {
+            setAlarmStatus(ALARM);
+        }
         if (armingStatus == ArmingStatus.DISARMED) {
             setAlarmStatus(NO_ALARM);
+        } else {
+            ConcurrentSkipListSet<Sensor> sensors = new ConcurrentSkipListSet<>(getSensors());
+            sensors.forEach(sensor -> changeSensorActivationStatus(sensor, false));
         }
+
         securityRepository.setArmingStatus(armingStatus);
+        statusListeners.forEach(StatusListener::sensorStatusChanged);
+    }
+
+    private boolean getAllSensorsFromState(boolean state) {
+        return getSensors().stream().allMatch(sensor -> sensor.getActive() == state);
     }
 
     /**
@@ -51,12 +65,13 @@ public class SecurityService {
      * @param cat True if a cat is detected, otherwise false.
      */
     private void catDetected(Boolean cat) {
+        catDetection = cat;
+
         if (cat && getArmingStatus() == ArmingStatus.ARMED_HOME) {
             setAlarmStatus(ALARM);
-        } else {
+        } else if (!cat && getAllSensorsFromState(false)) {
             setAlarmStatus(NO_ALARM);
         }
-
         statusListeners.forEach(sl -> sl.catDetected(cat));
     }
 
@@ -113,12 +128,34 @@ public class SecurityService {
      * @param active
      */
     public void changeSensorActivationStatus(Sensor sensor, Boolean active) {
-        if (!sensor.getActive() && active) {
-            handleSensorActivated();
-        } else if (sensor.getActive() && !active) {
+        AlarmStatus actualAlarmStatus = securityRepository.getAlarmStatus();
+
+        if(actualAlarmStatus != AlarmStatus.ALARM) {
+            if(active) {
+                handleSensorActivated();
+            } else if (sensor.getActive()) {
+                handleSensorDeactivated();
+            }
+        }
+
+        sensor.setActive(active);
+        securityRepository.updateSensor(sensor);
+    }
+
+    /**
+     * Change the activation status for the specified sensor when no activate status is passed and update alarm status if necessary.
+     *
+     * @param sensor
+     */
+    public void changeSensorActivationStatus(Sensor sensor) {
+        AlarmStatus actualAlarmStatus = this.getAlarmStatus();
+        ArmingStatus actualArmingStatus = this.getArmingStatus();
+
+        if (actualAlarmStatus == AlarmStatus.PENDING_ALARM && !sensor.getActive()) {
+            handleSensorDeactivated();
+        } else if (actualAlarmStatus == AlarmStatus.ALARM && actualArmingStatus == ArmingStatus.DISARMED) {
             handleSensorDeactivated();
         }
-        sensor.setActive(active);
         securityRepository.updateSensor(sensor);
     }
 
