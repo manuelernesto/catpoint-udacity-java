@@ -14,7 +14,7 @@
 
     <name>Security</name>
 
-    <description>Security Demo</description>
+    <description>Security Module</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
