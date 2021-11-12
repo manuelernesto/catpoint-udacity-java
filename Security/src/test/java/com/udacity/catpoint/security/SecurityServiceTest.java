@@ -49,8 +49,9 @@ class SecurityServiceTest {
     }
 
 
-    // Tests required as a functional requirement
-
+    /*
+     * Tests required as a functional requirement
+     * */
 
     @Test
     void ifSystemArmedAndSensorActivated_changeStatusToPending() {
@@ -155,27 +156,6 @@ class SecurityServiceTest {
         service.setArmingStatus(ArmingStatus.ARMED_HOME);
 
         verify(repository, times(1)).setAlarmStatus(AlarmStatus.ALARM);
-    }
-
-
-    //Extra tests for the SecurityService class
-
-    /*
-     * Status Listener Test
-     * */
-    @Test
-    void addAndRemoveStatusListener() {
-        service.addStatusListener(statusListener);
-        service.removeStatusListener(statusListener);
-    }
-
-    /*
-     * Sensor Listener test
-     * */
-    @Test
-    void addAndRemoveSensor() {
-        service.addSensor(sensor);
-        service.removeSensor(sensor);
     }
 
     /*
